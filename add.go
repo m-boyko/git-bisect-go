@@ -13,5 +13,6 @@ func Sub(a, b int) int {
 func main() {
 	fmt.Println(Add(1, 2))
 	fmt.Println(Add(2, 2))
+	fmt.Println(Add(3, 2))
 	fmt.Println(Sub(1, 2))
 }
