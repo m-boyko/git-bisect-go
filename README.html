@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>When Did the Bug Creep In&quest; Find Out with Git Bisect and Go Tests</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+            
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-light">
+            <h1 id="when-did-the-bug-creep-in-find-out-with-git-bisect-and-go-tests">When Did the Bug Creep In? Find Out with Git Bisect and Go Tests</h1>
+<p>Bugs are an inevitable part of software development. Sometimes, they remain hidden in the codebase for a long time, only surfacing when a new test is introduced. This was the case here: a bug had been present for a while, but it was only discovered after adding a new test that exposed the issue. Now, the challenge is to determine which commit introduced the bug. Manually inspecting each commit would be inefficient. Instead, we can use <code>git bisect</code>, a powerful tool that automates the process of identifying the problematic commit. Combined with Go tests, it becomes an effective way to trace the origin of the bug.</p>
+<h2 id="the-problem-a-hidden-bug-revealed">The Problem: A Hidden Bug Revealed</h2>
+<p>Consider the following commit history:</p>
+<pre><code class="language-git">commit d51fc0c0e7fc348f97ed1ed3f8ab49aa07a382ad (HEAD -&gt; master, origin/master)
+Author: Margarita Boyko &lt;m-boyko@outlook.com&gt;
+Date:   Mon Jan 27 15:26:25 2025 +0300
+
+    5 commit
+
+commit de8e1c61d4cbb0292e417ac8d3b7a4d58286c5c9
+Author: Margarita Boyko &lt;m-boyko@outlook.com&gt;
+Date:   Mon Jan 27 15:26:02 2025 +0300
+
+    4 commit
+
+commit 5969282ad21deb652798fa6676e5e40b52dd8c67
+Author: Margarita Boyko &lt;m-boyko@outlook.com&gt;
+Date:   Mon Jan 27 15:25:11 2025 +0300
+
+    3 commit
+
+commit b6da2a3c2de8b0fddc30d1d82c2bd42c2cb386c8
+Author: Margarita Boyko &lt;m-boyko@outlook.com&gt;
+Date:   Mon Jan 27 15:19:03 2025 +0300
+
+    2 commit
+
+commit dbdaf1e25fadfc1876483fa41a6003047bb59c3d
+Author: Margarita Boyko &lt;m-boyko@outlook.com&gt;
+Date:   Mon Jan 27 15:15:09 2025 +0300
+
+    1 commit
+</code></pre>
+<p>A new test was added, and it failed, revealing a bug that had been present for some time. The question now is: which commit introduced this bug? To answer this, we can use <code>git bisect</code>.</p>
+<h2 id="what-is-git-bisect">What is Git Bisect?</h2>
+<p><code>git bisect</code> is a Git command that performs a binary search through the commit history to identify the exact commit that introduced a bug. It requires you to specify a &quot;good&quot; commit (where the bug did not exist) and a &quot;bad&quot; commit (where the bug is present). Git then checks out commits in between and asks you to test them until it narrows down the problematic commit.</p>
+<h2 id="setting-up-git-bisect">Setting Up Git Bisect</h2>
+<p>To begin, initialize the bisect process:</p>
+<pre><code class="language-bash">git bisect start
+</code></pre>
+<p>Next, mark the current commit as bad, since the new test is failing:</p>
+<pre><code class="language-bash">git bisect bad
+</code></pre>
+<p>Then, specify a known good commit. For example, if commit <code>1</code> (<code>dbdaf1e25fadfc1876483fa41a6003047bb59c3d</code>) is known to be free of the bug, mark it as good:</p>
+<pre><code class="language-bash">git bisect good dbdaf1e25fadfc1876483fa41a6003047bb59c3d
+</code></pre>
+<p>Git will now check out a commit in the middle of the range and wait for you to test it.</p>
+<h2 id="automating-the-process-with-go-tests">Automating the Process with Go Tests</h2>
+<p>Manually testing each commit can be time-consuming. Fortunately, <code>git bisect</code> allows you to automate this process using a script. In this case, we’ll use Go tests to determine whether a commit is good or bad. Run the following command:</p>
+<pre><code class="language-bash">git bisect run go <span class="hljs-built_in">test</span> ./...
+</code></pre>
+<p>This instructs Git to run <code>go test ./...</code> on each commit it checks out. If the tests pass, the commit is marked as good. If the tests fail, the commit is marked as bad.</p>
+<h2 id="the-bisect-process-in-action">The Bisect Process in Action</h2>
+<p>Here’s how the process unfolds:</p>
+<ol>
+<li>
+<p>Git checks out commit <code>2</code> (<code>b6da2a3c2de8b0fddc30d1d82c2bd42c2cb386c8</code>) and runs the tests:</p>
+<pre><code class="language-bash">running  <span class="hljs-string">&#x27;go&#x27;</span> <span class="hljs-string">&#x27;test&#x27;</span> <span class="hljs-string">&#x27;./...&#x27;</span>
+ok      git-bisect      (cached)
+</code></pre>
+<p>The tests pass, so Git marks this commit as good.</p>
+</li>
+<li>
+<p>Git then checks out commit <code>4</code> (<code>de8e1c61d4cbb0292e417ac8d3b7a4d58286c5c9</code>) and runs the tests:</p>
+<pre><code class="language-bash">running  <span class="hljs-string">&#x27;go&#x27;</span> <span class="hljs-string">&#x27;test&#x27;</span> <span class="hljs-string">&#x27;./...&#x27;</span>
+--- FAIL: TestAdd (0.00s)
+    add_test.go:8: Expected 3, but got 1
+FAIL
+FAIL    git-bisect      0.283s
+FAIL
+</code></pre>
+<p>The tests fail, so Git marks this commit as bad.</p>
+</li>
+<li>
+<p>Finally, Git checks out commit <code>3</code> (<code>5969282ad21deb652798fa6676e5e40b52dd8c67</code>) and runs the tests:</p>
+<pre><code class="language-bash">running  <span class="hljs-string">&#x27;go&#x27;</span> <span class="hljs-string">&#x27;test&#x27;</span> <span class="hljs-string">&#x27;./...&#x27;</span>
+ok      git-bisect      (cached)
+</code></pre>
+<p>The tests pass, so Git concludes that commit <code>4</code> is the first bad commit.</p>
+</li>
+</ol>
+<h2 id="identifying-the-faulty-commit">Identifying the Faulty Commit</h2>
+<p>Git identifies commit <code>4</code> as the first bad commit:</p>
+<pre><code class="language-bash">de8e1c61d4cbb0292e417ac8d3b7a4d58286c5c9 is the first bad commit
+commit de8e1c61d4cbb0292e417ac8d3b7a4d58286c5c9
+Author: Margarita Boyko &lt;m-boyko@outlook.com&gt;
+Date:   Mon Jan 27 15:26:02 2025 +0300
+
+    4 commit
+
+ add.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+</code></pre>
+<p>With this information, you can inspect the changes in commit <code>4</code> and address the issue.</p>
+<h2 id="resetting-git-bisect">Resetting Git Bisect</h2>
+<p>Once the faulty commit has been identified, you can exit the bisect process and return to your original branch:</p>
+<pre><code class="language-bash">git bisect reset
+</code></pre>
+<p>This command ends the bisect session and restores your repository to its previous state.</p>
+<h2 id="tldr">TL;DR</h2>
+<ul>
+<li>A bug was hiding in your code, and a new test exposed it.</li>
+<li>Use <code>git bisect</code> to find the commit that introduced the bug.</li>
+<li>Automate it with <code>go test ./...</code> (or any other test script).</li>
+<li>Save time, stay sane, and fix bugs faster.</li>
+</ul>
+
+            
+            
+        </body>
+        </html>

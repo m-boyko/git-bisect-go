@@ -1,3 +1,5 @@
+# When Did the Bug Creep In? Find Out with Git Bisect and Go Tests
+
 Bugs are an inevitable part of software development. Sometimes, they remain hidden in the codebase for a long time, only surfacing when a new test is introduced. This was the case here: a bug had been present for a while, but it was only discovered after adding a new test that exposed the issue. Now, the challenge is to determine which commit introduced the bug. Manually inspecting each commit would be inefficient. Instead, we can use `git bisect`, a powerful tool that automates the process of identifying the problematic commit. Combined with Go tests, it becomes an effective way to trace the origin of the bug.
 
 ## The Problem: A Hidden Bug Revealed
